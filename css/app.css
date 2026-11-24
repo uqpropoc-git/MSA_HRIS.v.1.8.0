@@ -12,7 +12,8 @@
 .detail-reason small{display:block;color:#6b7a88;font-size:11px;margin-bottom:4px;font-weight:650}
 .detail-reason p{margin:0;font-size:13px;line-height:1.5;color:#172637;white-space:pre-wrap}
 .detail-bal{background:#edf7f3;color:#16664d;padding:10px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:14px}
-.modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:6px}
+.modal-note-label textarea{min-height:72px}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:12px}
 .modal-actions .primary{width:auto;margin-top:0}
 .btn-secondary{background:#5c6c7a}
 
