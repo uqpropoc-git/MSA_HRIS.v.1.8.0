@@ -2,9 +2,17 @@ const $=s=>document.querySelector(s),app=$('#app');const esc=s=>String(s??'').re
 const LEAVE_META={
   ANNUAL:{label:'Cuti Tahunan',unit:'hari kerja',hint:'Dihitung berdasarkan hari kerja (tidak termasuk Minggu & hari libur non-potong cuti).'},
   LONG:{label:'Istirahat Panjang',unit:'hari kalender',hint:'Istirahat panjang (30 hari per kelipatan 5 tahun masa kerja); dihitung berdasarkan hari kalender.'},
-  MATERNITY:{label:'Cuti Melahirkan (Pasal 121)',unit:'hari kalender',hint:'Sesuai UU No. 27 Tahun 2026 Pasal 121 (maksimal 90 hari kalender; tidak memotong cuti tahunan).'},
-  PATERNITY:{label:'Cuti Pendampingan Melahirkan (Pasal 124)',unit:'hari kerja',hint:'Sesuai UU No. 27 Tahun 2026 Pasal 124 (maksimal 2 hari; tidak memotong cuti tahunan).'},
-  MENSTRUAL:{label:'Cuti Haid (Pasal 120)',unit:'hari kerja',hint:'Sesuai UU No. 27 Tahun 2026 Pasal 120 (maksimal 2 hari pada hari pertama & kedua haid per bulan; tidak memotong cuti tahunan).'}
+  MATERNITY:{label:'Cuti Melahirkan (Pasal 121)',unit:'hari kalender',hint:'UU No. 27 Tahun 2026 Pasal 121 (maksimal 90 hari kalender; tidak memotong cuti tahunan).'},
+  PATERNITY:{label:'Cuti Pendampingan Melahirkan (Pasal 124)',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 Pasal 124 (maksimal 2 hari; tidak memotong cuti tahunan).'},
+  MENSTRUAL:{label:'Cuti Haid (Pasal 120)',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 Pasal 120 (maksimal 2 hari per bulan; tidak memotong cuti tahunan).'},
+  MARRIAGE:{label:'Cuti Menikah',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Cuti menikah selama 3 hari (tidak memotong cuti tahunan).'},
+  CHILD_MARRIAGE:{label:'Cuti Menikahkan Anak',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Cuti menikahkan anak selama 2 hari (tidak memotong cuti tahunan).'},
+  CHILD_CIRCUMCISION:{label:'Cuti Menghitankan Anak',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Cuti menghitankan anak selama 2 hari (tidak memotong cuti tahunan).'},
+  CHILD_BAPTISM:{label:'Cuti Membaptiskan Anak',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Cuti membaptiskan anak selama 2 hari (tidak memotong cuti tahunan).'},
+  BEREAVEMENT_FAMILY:{label:'Cuti Keluarga Meninggal Dunia',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Suami/istri, orang tua/mertua, atau anak/menantu meninggal dunia selama 2 hari.'},
+  BEREAVEMENT_HOUSEHOLD:{label:'Cuti Anggota Keluarga Serumah Meninggal',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Anggota keluarga serumah meninggal dunia selama 1 hari.'},
+  STATE_DUTY:{label:'Cuti Kewajiban Terhadap Negara',unit:'hari kerja',hint:'UU No. 27 Tahun 2026 — Menjalankan kewajiban terhadap negara (durasi sesuai kebijakan perusahaan).'},
+  RELIGIOUS_PILGRIMAGE:{label:'Cuti Ibadah (Umroh/Haji/Ziarah Tanah Suci)',unit:'hari kalender',hint:'UU No. 27 Tahun 2026 — Cuti ibadah Umroh/Haji/Ziarah Tanah Suci (durasi sesuai kebijakan perusahaan).'}
 };
 const leaveMeta=t=>LEAVE_META[String(t||'ANNUAL').toUpperCase()]||LEAVE_META.ANNUAL;
 
@@ -26,8 +34,9 @@ async function leaveForm(){
       :`Istirahat Panjang: belum eligible (masa kerja ${ll.tenure_years||0} thn${ll.next_eligible_date?`, aktif ${ll.next_eligible_date}`:''})`)
     :'';
   const mensSummary=sl?`Sisa Cuti Haid bulan ini: ${sl.menstrual_remaining} hari`:'';
+  const typeOptions=Object.keys(LEAVE_META).map(k=>`<option value="${k}">${esc(LEAVE_META[k].label)}</option>`).join('');
 
-  $('#content').innerHTML=`<div class="panel"><h3>Form Pengajuan Cuti</h3>${bal?`<div class="balance">Saldo tahunan ${bal.annual_remaining} hari · Carry forward ${bal.carry_remaining} hari · Total ${bal.total_available} hari${longSummary?` · ${esc(longSummary)}`:''}${mensSummary?` · ${esc(mensSummary)}`:''}</div>`:''}<form id="leaveForm"><div class="formgrid"><label>Jenis pengajuan<select name="leave_type" id="leaveTypeSelect"><option value="ANNUAL">Cuti Tahunan (Hari Kerja)</option><option value="LONG">Istirahat Panjang (30 Hari / 5 Tahun)</option><option value="MATERNITY">Cuti Melahirkan (UU 27/2026 Pasal 121)</option><option value="PATERNITY">Cuti Pendampingan Melahirkan (UU 27/2026 Pasal 124)</option><option value="MENSTRUAL">Cuti Haid (UU 27/2026 Pasal 120)</option></select></label><div id="leaveTypeHint" class="type-hint">${esc(LEAVE_META.ANNUAL.hint)}</div><label>Tanggal mulai<input name="start_date" type="date" required></label><label>Tanggal selesai<input name="end_date" type="date" required></label></div><label>Alasan pengajuan<textarea name="reason" maxlength="500" required></textarea></label><button class="primary">Kirim Pengajuan</button><div class="msg" id="msg"></div><small>Jika offline, pengajuan disimpan sebagai draft lokal dan dikirim otomatis saat koneksi kembali. Approval tetap harus dilakukan online.</small></form></div>`;
+  $('#content').innerHTML=`<div class="panel"><h3>Form Pengajuan Cuti</h3>${bal?`<div class="balance">Saldo tahunan ${bal.annual_remaining} hari · Carry forward ${bal.carry_remaining} hari · Total ${bal.total_available} hari${longSummary?` · ${esc(longSummary)}`:''}${mensSummary?` · ${esc(mensSummary)}`:''}</div>`:''}<form id="leaveForm"><div class="formgrid"><label>Jenis pengajuan<select name="leave_type" id="leaveTypeSelect">${typeOptions}</select></label><div id="leaveTypeHint" class="type-hint">${esc(LEAVE_META.ANNUAL.hint)}</div><label>Tanggal mulai<input name="start_date" type="date" required></label><label>Tanggal selesai<input name="end_date" type="date" required></label></div><label>Alasan pengajuan<textarea name="reason" maxlength="500" required></textarea></label><button class="primary">Kirim Pengajuan</button><div class="msg" id="msg"></div><small>Jika offline, pengajuan disimpan sebagai draft lokal dan dikirim otomatis saat koneksi kembali. Approval tetap harus dilakukan online.</small></form></div>`;
 
   const typeSel=$('#leaveTypeSelect'),hintEl=$('#leaveTypeHint');
   const syncHint=()=>{
