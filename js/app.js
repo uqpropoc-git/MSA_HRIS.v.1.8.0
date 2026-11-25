@@ -1,4 +1,13 @@
 const $=s=>document.querySelector(s),app=$('#app');const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));const me=()=>JSON.parse(localStorage.getItem('msa_user')||'null');const fmt=n=>Number(n||0).toLocaleString('id-ID');
+const LEAVE_META={
+  ANNUAL:{label:'Cuti Tahunan',unit:'hari kerja',hint:'Dihitung berdasarkan hari kerja (tidak termasuk Minggu & hari libur non-potong cuti).'},
+  LONG:{label:'Istirahat Panjang',unit:'hari kalender',hint:'Istirahat panjang (30 hari per kelipatan 5 tahun masa kerja); dihitung berdasarkan hari kalender.'},
+  MATERNITY:{label:'Cuti Melahirkan (Pasal 121)',unit:'hari kalender',hint:'Sesuai UU No. 27 Tahun 2026 Pasal 121 (maksimal 90 hari kalender; tidak memotong cuti tahunan).'},
+  PATERNITY:{label:'Cuti Pendampingan Melahirkan (Pasal 124)',unit:'hari kerja',hint:'Sesuai UU No. 27 Tahun 2026 Pasal 124 (maksimal 2 hari; tidak memotong cuti tahunan).'},
+  MENSTRUAL:{label:'Cuti Haid (Pasal 120)',unit:'hari kerja',hint:'Sesuai UU No. 27 Tahun 2026 Pasal 120 (maksimal 2 hari pada hari pertama & kedua haid per bulan; tidak memotong cuti tahunan).'}
+};
+const leaveMeta=t=>LEAVE_META[String(t||'ANNUAL').toUpperCase()]||LEAVE_META.ANNUAL;
+
 function login(){app.innerHTML=`<main class="login"><form class="loginbox" id="loginForm"><div class="brand">FORM <span>PENGAJUAN CUTI</span></div><p>PT MULTISARANA AVINDO</p><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">Masuk</button><div id="msg" class="msg"></div><small>Created by UQ</small></form></main>`;$('#loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const d=await API.call('login',{username:f.get('username'),password:f.get('password')});localStorage.setItem('msa_token',d.token);localStorage.setItem('msa_user',JSON.stringify(d.user));render();}catch(x){$('#msg').textContent=x.message;}};}
 function render(){if(!me())return login();const u=me(),nav=[['Dashboard','dashboard'],['Pengajuan Cuti','leave'],['Riwayat Cuti','history'],['Surat Cuti','docs'],['Kalender Libur','holidays'],['Ganti Password','password']];if(['ADMIN','HRD','KABAG'].includes(u.role))nav.splice(1,0,['Approval','approval']);if(['ADMIN','HRD'].includes(u.role))nav.push(['Data Karyawan','employees'],['Pengaturan Hari Libur','holiday-admin'],['Laporan','reports']);if(u.role==='ADMIN')nav.push(['Manajemen User','users'],['Audit Log','audit'],['Backup','backup']);app.innerHTML=`<div class="layout"><aside><div class="brand">MSA <span>HRIS</span></div><div class="profile"><b>${esc(u.full_name)}</b><small>${esc(u.role)}</small></div><nav>${nav.map(([n,k])=>`<button data-page="${k}">${n}</button>`).join('')}</nav><button id="logout" class="logout">Keluar</button><footer>Created by UQ</footer></aside><main class="main"><header><div><h1 id="pageTitle">Dashboard</h1><small>PT Multisarana Avindo</small></div><div class="status" id="status"></div></header><section id="content"></section></main></div>`;document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));$('#logout').onclick=async()=>{try{await API.call('logout')}catch{}localStorage.removeItem('msa_token');localStorage.removeItem('msa_user');login();};updateStatus();page('dashboard');}
 function updateStatus(){const s=$('#status');if(s)s.textContent=navigator.onLine?'● Online':'● Offline · data tersimpan lokal';}window.addEventListener('online',updateStatus);window.addEventListener('offline',updateStatus);
@@ -10,20 +19,20 @@ async function leaveForm(){
   let bal=null;
   if(me().role==='KARYAWAN'&&navigator.onLine)bal=await call('employeeBalance').catch(()=>null);
   const ll=bal?.long_leave||null;
+  const sl=bal?.special_leaves||null;
   const longSummary=ll
     ?(ll.eligible
       ?`Istirahat Panjang: siap dipakai ${ll.remaining} hari (masa kerja ${ll.tenure_years} thn)`
       :`Istirahat Panjang: belum eligible (masa kerja ${ll.tenure_years||0} thn${ll.next_eligible_date?`, aktif ${ll.next_eligible_date}`:''})`)
     :'';
+  const mensSummary=sl?`Sisa Cuti Haid bulan ini: ${sl.menstrual_remaining} hari`:'';
 
-  $('#content').innerHTML=`<div class="panel"><h3>Form Pengajuan Cuti / Istirahat Panjang</h3>${bal?`<div class="balance">Saldo tahunan ${bal.annual_remaining} hari · Carry forward ${bal.carry_remaining} hari · Total ${bal.total_available} hari${longSummary?` · ${esc(longSummary)}`:''}</div>`:''}<form id="leaveForm"><div class="formgrid"><label>Jenis pengajuan<select name="leave_type" id="leaveTypeSelect"><option value="ANNUAL">Cuti Tahunan (Hari Kerja)</option><option value="LONG">Istirahat Panjang (30 Hari / 5 Tahun)</option></select></label><div id="leaveTypeHint" class="type-hint">Dihitung berdasarkan hari kerja (tidak termasuk Minggu & hari libur non-potong cuti).</div><label>Tanggal mulai<input name="start_date" type="date" required></label><label>Tanggal selesai<input name="end_date" type="date" required></label></div><label>Alasan pengajuan<textarea name="reason" maxlength="500" required></textarea></label><button class="primary">Kirim Pengajuan</button><div class="msg" id="msg"></div><small>Jika offline, pengajuan disimpan sebagai draft lokal dan dikirim otomatis saat koneksi kembali. Approval tetap harus dilakukan online.</small></form></div>`;
+  $('#content').innerHTML=`<div class="panel"><h3>Form Pengajuan Cuti</h3>${bal?`<div class="balance">Saldo tahunan ${bal.annual_remaining} hari · Carry forward ${bal.carry_remaining} hari · Total ${bal.total_available} hari${longSummary?` · ${esc(longSummary)}`:''}${mensSummary?` · ${esc(mensSummary)}`:''}</div>`:''}<form id="leaveForm"><div class="formgrid"><label>Jenis pengajuan<select name="leave_type" id="leaveTypeSelect"><option value="ANNUAL">Cuti Tahunan (Hari Kerja)</option><option value="LONG">Istirahat Panjang (30 Hari / 5 Tahun)</option><option value="MATERNITY">Cuti Melahirkan (UU 27/2026 Pasal 121)</option><option value="PATERNITY">Cuti Pendampingan Melahirkan (UU 27/2026 Pasal 124)</option><option value="MENSTRUAL">Cuti Haid (UU 27/2026 Pasal 120)</option></select></label><div id="leaveTypeHint" class="type-hint">${esc(LEAVE_META.ANNUAL.hint)}</div><label>Tanggal mulai<input name="start_date" type="date" required></label><label>Tanggal selesai<input name="end_date" type="date" required></label></div><label>Alasan pengajuan<textarea name="reason" maxlength="500" required></textarea></label><button class="primary">Kirim Pengajuan</button><div class="msg" id="msg"></div><small>Jika offline, pengajuan disimpan sebagai draft lokal dan dikirim otomatis saat koneksi kembali. Approval tetap harus dilakukan online.</small></form></div>`;
 
   const typeSel=$('#leaveTypeSelect'),hintEl=$('#leaveTypeHint');
   const syncHint=()=>{
     if(!hintEl)return;
-    hintEl.textContent=typeSel?.value==='LONG'
-      ?'Istirahat panjang (30 hari per kelipatan 5 tahun masa kerja); dihitung berdasarkan hari kalender.'
-      :'Dihitung berdasarkan hari kerja (tidak termasuk Minggu & hari libur non-potong cuti).';
+    hintEl.textContent=leaveMeta(typeSel?.value).hint;
   };
   if(typeSel){typeSel.onchange=syncHint;syncHint();}
 
@@ -43,7 +52,7 @@ async function leaveForm(){
     }
     try{
       const d=await call('createLeave',f);
-      const label=d.leave_type==='LONG'?'istirahat panjang':'cuti';
+      const label=leaveMeta(d.leave_type).label;
       if($('#msg'))$('#msg').textContent=`Pengajuan ${label} terkirim (${d.total_days} hari), status ${d.status}.`;
       form?.reset();
       syncHint();
@@ -62,7 +71,7 @@ async function leaveList(kind){
   $('#content').innerHTML=`<div class="panel"><div class="tablewrap"><table><thead><tr><th>ID</th><th>Karyawan</th><th>Jenis</th><th>Periode</th><th>Hari</th><th>Status</th>${kind==='approval'?'<th>Aksi</th>':''}</tr></thead><tbody>${a.map(x=>{
     const emp=empMap[x.employee_id]||{};
     const nama=x.employee_name||x.name||emp.name||x.employee_id;
-    const jenisLabel=String(x.leave_type||'ANNUAL').toUpperCase()==='LONG'?'Istirahat Panjang':'Cuti Tahunan';
+    const jenisLabel=leaveMeta(x.leave_type).label;
     return `<tr><td>${esc(x.leave_id.slice(0,8))}</td><td>${esc(nama)}</td><td><span class="pill">${esc(jenisLabel)}</span></td><td>${esc(x.start_date)} – ${esc(x.end_date)}</td><td>${x.total_days}</td><td><span class="pill">${esc(x.status)}</span></td>${kind==='approval'?`<td><button type="button" class="btn-secondary" onclick="openLeaveModal('${x.leave_id}')">Detail</button> <button type="button" onclick="decide('${x.leave_id}',true)">Approve</button> <button type="button" class="danger" onclick="decide('${x.leave_id}',false)">Tolak</button></td>`:''}</tr>`;
   }).join('')||'<tr><td colspan="7">Tidak ada data.</td></tr>'}</tbody></table></div></div><div id="leaveModalSlot"></div>`;
 }
@@ -74,16 +83,15 @@ window.openLeaveModal=async id=>{
   const emp=(window.__empMapCache||{})[x.employee_id]||{};
   const nama=x.employee_name||x.name||emp.name||x.employee_id;
   const dept=x.department_name||'-';
-  const isLong=String(x.leave_type||'ANNUAL').toUpperCase()==='LONG';
-  const jenisLabel=isLong?'Istirahat Panjang':'Cuti Tahunan';
-  const satuanLabel=isLong?'hari':'hari kerja';
+  const meta=leaveMeta(x.leave_type);
   const slot=$('#leaveModalSlot');
-  slot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeLeaveModal()"><div class="modal-box"><div class="modal-head"><h3>Detail Pengajuan Cuti</h3><button type="button" class="modal-close" onclick="closeLeaveModal()">✕</button></div><div class="detail-grid"><div class="detail-item"><small>Nama Karyawan</small><b>${esc(nama)}</b></div><div class="detail-item"><small>Departemen</small><b>${esc(dept)}</b></div><div class="detail-item"><small>Jenis Pengajuan</small><b>${esc(jenisLabel)}</b></div><div class="detail-item"><small>Status</small><b>${esc(x.status)}</b></div><div class="detail-item"><small>Tanggal Mulai</small><b>${esc(x.start_date)}</b></div><div class="detail-item"><small>Tanggal Selesai</small><b>${esc(x.end_date)}</b></div><div class="detail-item"><small>Jumlah Hari</small><b>${esc(x.total_days)} ${esc(satuanLabel)}</b></div></div><div id="modalBalance" class="detail-bal">Memuat saldo cuti…</div><div class="detail-reason"><small>Alasan Cuti</small><p>${esc(x.reason||'-')}</p></div>${x.kabag_note?`<div class="detail-reason"><small>Catatan Kabag</small><p>${esc(x.kabag_note)}</p></div>`:''}<label class="modal-note-label">Alasan / Catatan Approve atau Tolak<textarea id="modalDecisionNote" maxlength="500" placeholder="Opsional untuk Approve, wajib diisi jika Tolak"></textarea></label><div class="modal-actions"><button type="button" class="btn-secondary" onclick="closeLeaveModal()">Tutup</button><button type="button" onclick="submitModalDecision('${x.leave_id}',true)">Approve</button><button type="button" class="danger" onclick="submitModalDecision('${x.leave_id}',false)">Tolak</button></div></div></div>`;
+  slot.innerHTML=`<div class="modal-backdrop" onclick="if(event.target===this)closeLeaveModal()"><div class="modal-box"><div class="modal-head"><h3>Detail Pengajuan Cuti</h3><button type="button" class="modal-close" onclick="closeLeaveModal()">✕</button></div><div class="detail-grid"><div class="detail-item"><small>Nama Karyawan</small><b>${esc(nama)}</b></div><div class="detail-item"><small>Departemen</small><b>${esc(dept)}</b></div><div class="detail-item"><small>Jenis Pengajuan</small><b>${esc(meta.label)}</b></div><div class="detail-item"><small>Status</small><b>${esc(x.status)}</b></div><div class="detail-item"><small>Tanggal Mulai</small><b>${esc(x.start_date)}</b></div><div class="detail-item"><small>Tanggal Selesai</small><b>${esc(x.end_date)}</b></div><div class="detail-item"><small>Jumlah Hari</small><b>${esc(x.total_days)} ${esc(meta.unit)}</b></div></div><div id="modalBalance" class="detail-bal">Memuat saldo cuti…</div><div class="detail-reason"><small>Alasan Cuti</small><p>${esc(x.reason||'-')}</p></div>${x.kabag_note?`<div class="detail-reason"><small>Catatan Kabag</small><p>${esc(x.kabag_note)}</p></div>`:''}<label class="modal-note-label">Alasan / Catatan Approve atau Tolak<textarea id="modalDecisionNote" maxlength="500" placeholder="Opsional untuk Approve, wajib diisi jika Tolak"></textarea></label><div class="modal-actions"><button type="button" class="btn-secondary" onclick="closeLeaveModal()">Tutup</button><button type="button" onclick="submitModalDecision('${x.leave_id}',true)">Approve</button><button type="button" class="danger" onclick="submitModalDecision('${x.leave_id}',false)">Tolak</button></div></div></div>`;
   try{
     const bal=await call('employeeBalance',{employee_id:x.employee_id,date:x.start_date});
     const el=$('#modalBalance');
     const longTxt=bal.long_leave?` · Istirahat panjang sisa ${bal.long_leave.remaining} hari (masa kerja ${bal.long_leave.tenure_years} thn)`:'';
-    if(el)el.textContent=`Saldo tahunan sisa ${bal.annual_remaining} hari · Carry forward ${bal.carry_remaining} hari · Total tersedia ${bal.total_available} hari${longTxt}`;
+    const mensTxt=bal.special_leaves?` · Sisa cuti haid bulan ${bal.special_leaves.menstrual_month}: ${bal.special_leaves.menstrual_remaining} hari`:'';
+    if(el)el.textContent=`Saldo tahunan sisa ${bal.annual_remaining} hari · Carry forward ${bal.carry_remaining} hari · Total tersedia ${bal.total_available} hari${longTxt}${mensTxt}`;
   }catch{
     const el=$('#modalBalance');
     if(el)el.style.display='none';
